@@ -9,6 +9,7 @@ using namespace std;
 using namespace vnodelp;
 
 #define VERBOSE_DEBUG false
+#define VERBOSE_DEBUG_IT false
 #define VERBOSE_DEBUG2 false
 #define VERBOSE_DEBUG2_5 true
 #define VERBOSE_DEBUG2_5_2 false
@@ -19,6 +20,10 @@ using namespace vnodelp;
 #define PRINT2 false
 #define GNUPLOT_ESTIMATE true
 #define NEAR_C false
+#define JUST_THE_EDGES true
+
+#define MIN_INTERVAL_RADIUS 1.0E-10
+#define MIN_INT_TIME 1.0E-3
 
 struct point3{
         interval t;
@@ -40,7 +45,7 @@ vector<point3> branch(point3 p);
 bool bound(point3 p);
 vector<point3> BB(point3 p,int l);
 bool iterate(point3 yp,point3_fs *pm);
-point3_fs logsearch(point3 null,point3 end);
+point3_fs logsearch(bool &fatal, point3 null, point3 end);
 point3 solve(interval tend,point3 p);
 void header();
 void print(point3 p, double GlobalExcess);
@@ -57,12 +62,16 @@ bool lOFrinRx(point3 p);
 bool rOFlinRx(point3 p);
 bool rOFrinRx(point3 p);
 bool lOFlinRx(point3 p);
+bool FAROFrinRx(point3 p);
+bool FAROFlinRx(point3 p);
 bool inRx(point3 p);
 bool NOTinRx(point3 p);
 bool lOFtinRy(point3 p);
 bool uOFbinRy(point3 p);
 bool uOFtinRy(point3 p);
 bool lOFbinRy(point3 p);
+bool FAROFtinRy(point3 p);
+bool FAROFbinRy(point3 p);
 bool inRy(point3 p);
 bool NOTinRy(point3 p);
 bool NOTinR(point3 p);
@@ -71,17 +80,20 @@ bool lOFrinLx(point3 p);
 bool rOFlinLx(point3 p);
 bool rOFrinLx(point3 p);
 bool lOFlinLx(point3 p);
-bool FAROFrinLx(point3 p);
 bool lOFtrinLx(point3 p);
 bool rOFtrinLx(point3 p);
 bool rOFbrinLx(point3 p);
 bool NOTinLvx(point3 p);
+bool FAROFrinLx(point3 p);
+bool FAROFlinLx(point3 p);
 bool inLx(point3 p);
 bool NOTinLx(point3 p);
 bool lOFtinLy(point3 p);
 bool uOFbinLy(point3 p);
 bool uOFtinLy(point3 p);
 bool lOFbinLy(point3 p);
+bool FAROFtinLy(point3 p);
+bool FAROFbinLy(point3 p);
 bool inLy(point3 p);
 bool NOTinLy(point3 p);
 bool NOTinL(point3 p);
@@ -146,14 +158,14 @@ vnodeEngine(){ // Declare and init Solver
 }
 } VE;
 
-// The first approximation (in time)
-bool firstBetterZ(point3 first, point3 second){
-return UEnd(first.z)<UEnd(second.z);
+// The first approximation (in time) IT'S DEPENDENT ON THE DE! (Direction of the trajectory)
+bool firstBetterZ(point3 old_version, point3 new_version){
+return UEnd(old_version.z)<UEnd(new_version.z) && LEnd(old_version.z)<LEnd(new_version.z);
 };
 
-// The second approximation (in time)
-bool secondBetterZ(point3 first, point3 second){
-return UEnd(first.z)>UEnd(second.z);
+// The second approximation (in time) IT'S DEPENDENT ON THE DE! (Direction of the trajectory)
+bool secondBetterZ(point3 old_version, point3 new_version){
+return UEnd(old_version.z)>UEnd(new_version.z) && LEnd(old_version.z)>LEnd(new_version.z);
 };
 
 // The first approximation (in time)
@@ -253,7 +265,7 @@ point3 aPosterioriEst(point3_fs pm){
 
  estimation.x+=interval(-65,15)*T*T; // Theoretical computations, relying on T
  estimation.y+=interval(-4,2)*T*T;   // Generously overestimated
-				     // (Maybe better bounds are needed)
+                                     // (Maybe better bounds are needed)
  if(VERBOSE_DEBUG2_5)
   cout << "T: ("<< LEnd(T) <<","<< UEnd(T) <<") "<< rad(T) <<endl
        << "aPosterioriEst:"<< PPrintPoint3("",estimation,false) <<endl;
@@ -281,7 +293,7 @@ vector<point3> branch(point3 p){
 
  if (rad(p.x) > rad (p.y)) // Note: The priority here affects performance
   {   // Cut by X          // If L and R lies parallel to X or Y
-   if (rad(p.x)==0) //Not saves us from wrong definition of L and R
+   if (rad(p.x)<MIN_INTERVAL_RADIUS) //Not saves us from wrong definition of L and R
     {
        cout << "BRANCH: FATÁL ERROR, INTERVAL IS ONLY ONE POINT LONG!"
             << endl;
@@ -317,7 +329,7 @@ vector<point3> branch(point3 p){
  else
  {
    // Cut by Y
-   if (rad(p.y)==0)
+   if (rad(p.y)<MIN_INTERVAL_RADIUS)
    {
        cout <<"BRANCH: FATÁL ERROR, INTERVAL IS ONLY ONE POINT LONG!" <<endl;
        exit(1);
@@ -399,7 +411,12 @@ if(VERBOSE_DEBUG2) cout << "NEXT: if NOTinR(p) && NOTinL(p)" <<endl;
 
 #if NEAR_C
  if ((NOTinR(p) && NOTinL(p)) || FAROFrinLx(p))
-#else
+#elif JUST_THE_EDGES
+ if ((NOTinR(p) && NOTinL(p)) || (FAROFrinRx(p) && FAROFlinRx(p) &&
+                                  FAROFtinRy(p) && FAROFbinRy(p) &&
+                                  FAROFrinLx(p) && FAROFlinLx(p) &&
+                                  FAROFtinLy(p) && FAROFbinLy(p)))
+# else
  if (NOTinR(p) && NOTinL(p))
 #endif
  {
@@ -426,7 +443,7 @@ if(VERBOSE_DEBUG2) cout << "NEXT: if NOTinR(p) && NOTinL(p)" <<endl;
 
   // From the lower and upper approximation estimates the image on the plane
   // And use this estimation later
-  if(!fatal) estimation=aPosterioriEst(pm); // If fatal, no need for estimation
+  if(!fatal) estimation= aPosterioriEst(pm); // If fatal, no need for estimation
   cout << "bound conditions(true,"<<(true)<<"):"
        << " bound(pm.f):" << bound(pm.f)
        << " bound(pm.s):" << bound(pm.s)
@@ -492,7 +509,7 @@ interval t; // Initialize later to yp.t
 iVector y(3);
 point3 pnull,pend;
 point3_fs passtrough_coord;
-bool change=false;
+bool change=false,fatal=false;
 int current_return=0;
 
 if(VERBOSE_DEBUG2)
@@ -520,7 +537,7 @@ while(t!=tend)
  Solver->integrate(t,y,tend);
  if(Solver->successful()&& Solver->getGlobalExcess()<=VE.MaxGlobalExcess)
   {
-   if(VERBOSE_DEBUG)
+   if(VERBOSE_DEBUG_IT)
     {
      header();
      print(iVectorTopoint3(y,t),Solver->getGlobalExcess());
@@ -572,7 +589,8 @@ while(t!=tend)
         << "NEXT: logsearch(this goes in)"
         << PPrintPoint3("pend" ,passtrough_coord.s,false) << endl;
 
-   *pm=logsearch(passtrough_coord.f,passtrough_coord.s);
+   *pm=logsearch(fatal,passtrough_coord.f,passtrough_coord.s);
+    if (fatal) return true;
 
    // This is different from the usual output for easy reading
    if(VERBOSE_DEBUG){
@@ -595,12 +613,12 @@ return false; // Not fatal
 //------------------------------------------------------------------------
 
 // Logarithmic search
-point3_fs logsearch(point3 null,point3 end){
+point3_fs logsearch(bool &fatal, point3 null, point3 end){
 
 point3_fs current;
-point3 pm=null,pm2; // Middle interval
+point3 pm=null,abs_middle; // Middle interval
 point3_fs out; // Final approximations: first and second
-bool init=false;
+interval time;
 
 current.f=null; // Save to preserve the original
 current.s=end;
@@ -637,23 +655,38 @@ while (!onZinz(pm))
 
 // Intersects Z
 if(VERBOSE_DEBUG)
- cout << "Intersects Z:" << PPrintPoint3("current.f",current.f,false) << endl
-      << "Intersects Z:" << PPrintPoint3("current.s",current.s,false) << endl;
+ cout << "Intersects Z:" << PPrintPoint3("current.f",current.f,false)
+      << endl
+      << "Intersects Z:" << PPrintPoint3("current.s",current.s,false)
+      << endl
+      << "Intersects Z:" << PPrintPoint3("pm",pm,false)
+      << endl;
 
-pm2=pm; // This will be the absolute middle
+abs_middle=pm; // This will be the absolute middle
+
+if (!oZ(abs_middle)) {
+ cout << "FATÁL ERROR(abs_middle)!" <<endl;
+ fatal=true;
+ return current;
+}
 
 //--------------------------------
 
 // Triing to put closer the first interval to the middle interval
 
-init=true;
+pm = current.f;
+time = (current.f.t+abs_middle.t)/2;
 
 // If we find an intersection, then we're done
-while (init || (!onZinz(pm) && firstBetterZ(pm2,pm)))
+// We need to keep in mind three things:
+// 1) Time must not be too short, unless the zTol is too low
+// 2) The "better" point should not intersect the selected point in Z
+// 3) If the point is already good enough, don't make it worse!
+while (LEnd(time) >= MIN_INT_TIME && !onZinz(pm) && !(uZ(current.f) || aZ(current.f)))
 {
- init=false;
- // null.t -> (current.f.t+pm2.t)/2
- pm=solve((current.f.t+pm2.t)/2,null);
+ // null.t -> (current.f.t+abs_middle.t)/2
+ time = (current.f.t+abs_middle.t)/2;
+ pm=solve(time,null);
 
  // If we find better, update. If not, leave it.
  // Still good AND better then the original
@@ -663,6 +696,8 @@ while (init || (!onZinz(pm) && firstBetterZ(pm2,pm)))
   cout << "NEXT: logsearch(while2)" << PPrintPoint3("pm",pm,false)
        << endl
        << "NEXT: logsearch(while2)" << PPrintPoint3("current.f",current.f,false)
+       << endl
+       << "NEXT: logsearch(while2):" << PPrintPoint3("abs_middle",abs_middle,false)
        << endl;
 } // While
 
@@ -671,28 +706,43 @@ if(VERBOSE_DEBUG)
  cout << "Intersects Z_2(while)" << PPrintPoint3("current.f",current.f,false)
       << endl
       << "Intersects Z_2(while)" << PPrintPoint3("current.s",current.s,false)
+      << endl
+      << "Intersects Z_2(while)" << PPrintPoint3("abs_middle",abs_middle,false)
       << endl;
+
+if (LEnd(time)<MIN_INT_TIME) {
+ cout << "MIN_INT_TIME REACHED!" <<endl;
+ exit(1);
+}
 
 //--------------------------------
 
 // Triing to put closer the first interval to the middle interval
 
-init=true;
+pm = current.s;
+time = (current.s.t+abs_middle.t)/2;
 
 // If we find an intersection, then we're done
-while (init || (!onZinz(pm) && secondBetterZ(pm2,pm)))
+// We need to keep in mind three things:
+// 1) Time must not be too short, unless the zTol is too low
+// 2) The "better" point should not intersect the selected point in Z
+// 3) If the point is already good enough, don't make it worse!
+while (LEnd(time)>=MIN_INT_TIME && !onZinz(pm) && !(uZ(current.s) || aZ(current.s)))
 {
- init=false;
- // null.t -> (current.s.t+pm2.t)/2
- pm=solve((current.s.t+pm2.t)/2,null);
+ // null.t -> (current.s.t+abs_middle.t)/2
+ time = (current.s.t+abs_middle.t)/2;
+ pm=solve(time,null);
 
  // If we find better, update. If not, leave it.
  // Still good AND better then the original
  if (secondGoodZ(pm) && secondBetterZ(current.s,pm)) current.s=pm;
 
  if(VERBOSE_DEBUG)
-  cout << "NEXT: logsearch(while3)" << PPrintPoint3("pm",pm,false) << endl
+  cout << "NEXT: logsearch(while3)" << PPrintPoint3("pm",pm,false)
+       << endl
        << "NEXT: logsearch(while3)" << PPrintPoint3("current.s",current.s,false)
+       << endl
+       << "NEXT: logsearch(while3):" << PPrintPoint3("abs_middle",abs_middle,false)
        << endl;
 } // While
 
@@ -701,7 +751,14 @@ if(VERBOSE_DEBUG)
  cout << "Intersects Z_3(while)" << PPrintPoint3("current.f",current.f,false)
       << endl
       << "Intersects Z_3(while)" << PPrintPoint3("current.s",current.s,false)
+      << endl
+      << "Intersects Z_3(while)" << PPrintPoint3("abs_middle",abs_middle,false)
       << endl;
+
+if (LEnd(time)<MIN_INT_TIME) {
+ cout << "MIN_INT_TIME REACHED!" <<endl;
+ exit(1);
+}
 
 return current;
 } // LogSearch
@@ -905,6 +962,18 @@ bool lOFlinRx(point3 p){ // The whole interval is left of R
 return (UEnd(p.x + R.bl) < 0);
 }
 
+// Farther then 10^(-8) from "Right of R" line.
+bool FAROFrinRx(point3 p){
+interval lf = p.x + R.bl + interval(-1,1)*1.0E-8;
+return (UEnd(lf) < 0) || (LEnd(lf) > 0);
+}
+
+// Farther then 10^(-8) from "Left of R" line.
+bool FAROFlinRx(point3 p){
+interval lf = p.x + R.br + interval(-1,1)*1.0E-8;
+return (UEnd(lf) < 0) || (LEnd(lf) > 0);
+}
+
 bool inRx(point3 p){
 return lOFrinRx(p) && rOFlinRx(p);
 }
@@ -935,6 +1004,18 @@ return (LEnd(p.y - R.m*p.x - R.bt) > 0);
 // lowerside OF bottom
 bool lOFbinRy(point3 p){ // The whole interval is under R
 return (UEnd(p.y - R.m*p.x - R.bb) < 0);
+}
+
+// Farther then 10^(-8) from "Top of R" line.
+bool FAROFtinRy(point3 p){
+interval lf = p.y - R.m*p.x - R.bt + interval(-1,1)*1.0E-8;
+return (UEnd(lf) < 0) || (LEnd(lf) > 0);
+}
+
+// Farther then 10^(-8) from "Bottom of R" line.
+bool FAROFbinRy(point3 p){
+interval lf = p.y - R.m*p.x - R.bb + interval(-1,1)*1.0E-8;
+return (UEnd(lf) < 0) || (LEnd(lf) > 0);
 }
 
 bool inRy(point3 p){
@@ -974,12 +1055,6 @@ bool lOFlinLx(point3 p){ // The whole interval is left of L
 return (UEnd(p.x + L.bl) < 0);
 }
 
-// Farther then 10^(-8) from C line. This is for C SLOPE line
-bool FAROFrinLx(point3 p){
-interval lf = p.y - L.mr*p.x - L.br + interval(-1,1)*1.0E-8;
-return (UEnd(lf) < 0) || (LEnd(lf) > 0);
-}
-
 bool lOFtrinLx(point3 p){ // Left of the right end of the shorter line by x in L
 return (UEnd(p.x + L.trx) < 0);
 }
@@ -995,6 +1070,18 @@ return (LEnd(p.x + L.brx) > 0);
 // Not in L Vertically(=wrt the longer line by x): No need to check shorter line
 bool NOTinLvx(point3 p){
 return lOFlinLx(p) || rOFbrinLx(p);
+}
+
+// Farther then 10^(-8) from C line. This is for C SLOPE line
+bool FAROFrinLx(point3 p){
+interval lf = p.y - L.mr*p.x - L.br + interval(-1,1)*1.0E-8;
+return (UEnd(lf) < 0) || (LEnd(lf) > 0);
+}
+
+// Farther then 10^(-8) from "Left of L" line.
+bool FAROFlinLx(point3 p){
+interval lf = p.x + L.bl + interval(-1,1)*1.0E-8;
+return (UEnd(lf) < 0) || (LEnd(lf) > 0);
 }
 
 bool inLx(point3 p){
@@ -1027,6 +1114,18 @@ return (LEnd(p.y - L.mt*p.x - L.bt) > 0);
 // lowerside OF bottom
 bool lOFbinLy(point3 p){ // The whole interval is under L
 return (UEnd(p.y - L.mb*p.x - L.bb) < 0);
+}
+
+// Farther then 10^(-8) from "top of L" line.
+bool FAROFtinLy(point3 p){
+interval lf = p.y - L.mt*p.x - L.bt + interval(-1,1)*1.0E-8;
+return (UEnd(lf) < 0) || (LEnd(lf) > 0);
+}
+
+// Farther then 10^(-8) from "bottom of L" line.
+bool FAROFbinLy(point3 p){
+interval lf = p.y - L.mb*p.x - L.bb + interval(-1,1)*1.0E-8;
+return (UEnd(lf) < 0) || (LEnd(lf) > 0);
 }
 
 bool inLy(point3 p){
@@ -1120,7 +1219,7 @@ return
 
 //------------------------------------------------------------------------
 
-int main(){
+int main (int argc, char **argv){
 // Just for precision
 cout.setf(ios::fixed,ios::floatfield);
 cout.precision(20);
@@ -1214,5 +1313,5 @@ ret = BB(test,1);
 cout << "Final num. of pieces:"<< ret.size() << endl;
 cerr << "Final num. of pieces:"<< ret.size() << endl;
 
-return 0;
+return EXIT_SUCCESS;
 }

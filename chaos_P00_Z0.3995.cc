@@ -109,7 +109,7 @@ void Chaos( int              n,     // SIZE is the problem
             var_type         t,     // t is the time variable
             void*           param)  // param is a pointer to additional
 {
-    interval a(102.0),b(3.0),c(1.0),p(0.83); // OR p(0.0);
+    interval a(102.0),b(3.0),c(1.0),p(0.0); // OR p(0.83);
 
     yp[0]=     a*y[1] -b*(y[0]+p);
     yp[1]=  y[0]*y[2] -   y[1];
@@ -133,9 +133,9 @@ vnodeEngine(){ // Declare and init Solver
     Solver= new VNODE(ad);
     Solver->setOrder(50);
     MaxGlobalExcess=1000.0;
-    tend=10.0;
-    returns=3;
-    z=0.3;
+    tend=100.0;
+    returns=1;
+    z=0.3995;
     zTol=0.0003;
    }
 
@@ -250,8 +250,8 @@ point3 aPosterioriEst(point3_fs pm){
   cout << "aPosterioriEst(Before growth):"
        << PPrintPoint3("",estimation,false) <<endl;
 
- estimation.x+=interval(-50,19)*T*T; // Theoretical computations, relying on T
- estimation.y+=interval(-2,4)*T*T;   // Generously overestimated
+ estimation.x+=interval(-18,7 )*T*T; // Theoretical computations, relying on T
+ estimation.y+=interval(-4,2)*T*T;   // Generously overestimated
                                      // (Maybe better bounds are needed)
  if(VERBOSE_DEBUG2_5)
   cout << "T: ("<< LEnd(T) <<","<< UEnd(T) <<") "<< rad(T) <<endl
@@ -890,26 +890,26 @@ return s.str();
 static const struct T_R{
 interval m,br,bl,bt,bb;
 T_R(){
-    interval m_denom=79.0;
-    interval m_nom  =1400.0;
-    m= m_denom/m_nom;
-    br=0.66;
-    bl=0.24;
-    bt=-m*0.66 + 0.1357;
-    bb=-m*0.66 + 0.133;
+    interval m_denom=0.007;
+    interval m_nom  =0.097;
+    m = m_denom/m_nom;
+    br=-0.195;
+    bl=-0.26;
+    bt=m*0.266 - 0.0335;
+    bb=m*0.266 - 0.0365;
    }
 } R;
 
 static const struct T_L{
 interval m,br,bl,bt,bb;
 T_L(){
-    interval m_denom= 17.0;
-    interval m_nom  =230.0;
-    m= m_denom/m_nom;
-    br=-0.95;
-    bl=-1.18;
-    bt=m*(0.95)+0.0335;
-    bb=m*(0.95)+0.0314;
+    interval m_denom= 0.0120;
+    interval m_nom  = 0.176;
+    m = m_denom/m_nom;
+    br=-0.6;
+    bl=-0.7;
+    bt=m*(0.727) - 0.0645;
+    bb=m*(0.727) - 0.0675;
    }
 } L;
 
@@ -1153,38 +1153,39 @@ cerr << "zTol:" << VE.zTol<< endl;
 interval tnull= 0.0;
 interval eps = interval(-1,1)*1.0E-8;
 
-//A1-2: (0.66,0.133),(0.66,0.1357)
-//B1-2: (0.24,0.1093),(0.24,0.112)
-//C1-2: (-0.95,0.0314),(-0.95,0.0335)
-//D1-2: (-1.18,0.0144),(-1.18,0.0165)
+//A1-2: (-0.169,-0.0265),(-0.169,-0.0295) //-0.195
+//B1-2: (-0.266,-0.0335),(-0.266,-0.0365) //-0.26
+//C1-2: (-0.551,-0.0525),(-0.551,-0.0555) //-0.6
+//D1-2: (-0.727,-0.0645),(-0.727,-0.0675) //-0.7
 
 point3 test;
 test.t = tnull;
-test.z = 0.3 + eps;
+test.z = 0.3995 + eps;
 
 //L
-//~ test.x=interval(-1.18,-0.95);
-//~ test.y=interval(0.0144,0.0335);
+//~ test.x=interval(-0.7,-0.6);
+//~ test.y=interval(-0.0675,-0.0525);
+
 
 //R
-//~ test.x=interval(0.24,0.66);
-//~ test.y=interval(0.1093,0.1357);
+//~ test.x=interval(-0.26,-0.195);
+//~ test.y=interval(-0.0365,-0.0265);
 
 // A line
-//~ test.x = interval(0.66,0.66);
-//~ test.y = interval(0.133,0.1357);
+//~ test.x = interval(-0.195,-0.195);
+//~ test.y = interval(-0.0365,-0.0265);
 
 // B line
-//~ test.x = interval(0.24,0.24);
-//~ test.y = interval(0.1093,0.112);
+//~ test.x = interval(-0.26,-0.26);
+//~ test.y = interval(-0.0365,-0.0265);
 
 // C line
-//~ test.x = interval(-0.95,-0.95);
-//~ test.y = interval(0.0314,0.0335);
+//~ test.x = interval(-0.6,-0.6);
+//~ test.y = interval(-0.0675,-0.0525);
 
 // D line
-//~ test.x = interval(-1.18,-1.18);
-//~ test.y = interval(0.0144,0.0165);
+//~ test.x = interval(-0.7,-0.7);
+//~ test.y = interval(-0.0675,-0.0525);
 
 vector<point3> ret;
 
