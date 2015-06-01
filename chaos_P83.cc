@@ -249,8 +249,8 @@ point3 aPosterioriEst(point3_fs pm){
  if(VERBOSE_DEBUG2_5)
   cout << "aPosterioriEst(Before growth):"
        << PPrintPoint3("",estimation,false) <<endl;
-
- estimation.x+=interval(-50,19)*T*T; // Theoretical computations, relying on T
+                                     // Theoretical computations based on
+ estimation.x+=interval(-50,19)*T*T; // Grönwall's inequality, relying on T
  estimation.y+=interval(-2,4)*T*T;   // Generously overestimated
                                      // (Maybe better bounds are needed)
  if(VERBOSE_DEBUG2_5)
